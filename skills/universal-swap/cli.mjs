@@ -11,7 +11,7 @@
  */
 
 import { Wallet, getBytes } from "ethers";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync, appendFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -133,6 +133,239 @@ function printPreview(data) {
   }
 
   console.log(`  Root Hash:     ${data.rootHash}`);
+  console.log("");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INIT — First-time setup
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Reads or creates the .env file. Returns the current key-value pairs.
+ */
+function readEnvFile() {
+  const pairs = {};
+  if (existsSync(envPath)) {
+    const content = readFileSync(envPath, "utf-8");
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eqIdx = trimmed.indexOf("=");
+      if (eqIdx === -1) continue;
+      pairs[trimmed.slice(0, eqIdx).trim()] = trimmed.slice(eqIdx + 1).trim();
+    }
+  }
+  return pairs;
+}
+
+/**
+ * Writes a key=value to .env file. Updates existing key or appends new one.
+ */
+function setEnvValue(key, value) {
+  if (existsSync(envPath)) {
+    const content = readFileSync(envPath, "utf-8");
+    const lines = content.split("\n");
+    let found = false;
+    for (let i = 0; i < lines.length; i++) {
+      const trimmed = lines[i].trim();
+      if (trimmed.startsWith(`${key}=`) || trimmed.startsWith(`${key} =`)) {
+        lines[i] = `${key}=${value}`;
+        found = true;
+        break;
+      }
+    }
+    if (found) {
+      writeFileSync(envPath, lines.join("\n"), "utf-8");
+    } else {
+      appendFileSync(envPath, `\n${key}=${value}\n`, "utf-8");
+    }
+  } else {
+    writeFileSync(envPath, `${key}=${value}\n`, "utf-8");
+  }
+  // Also update the current process
+  process.env[key] = value;
+}
+
+async function cmdInit(args) {
+  console.log(`
+╔══════════════════════════════════════════════════════════════╗
+║   UniAgent — First-Time Setup                                ║
+╚══════════════════════════════════════════════════════════════╝
+`);
+
+  // ── Step 1: Check backend connectivity ──────────────────────────────────
+  const apiUrl = args.api || API_URL;
+  console.log(`  [1/4] Checking backend at ${apiUrl}...`);
+  try {
+    const health = await api("/health");
+    if (health.status === "ok") {
+      console.log(`         ✓ Backend is running\n`);
+    }
+  } catch (err) {
+    console.error(`
+  ✗ Cannot reach backend at ${apiUrl}
+
+  Make sure the UniAgent backend is running:
+    cd backend && node server.mjs
+
+  If the backend is at a different URL, run:
+    node cli.mjs init --api http://your-backend-url
+`);
+    process.exit(1);
+  }
+
+  // ── Step 2: Check or generate wallet ────────────────────────────────────
+  console.log(`  [2/4] Checking wallet...`);
+  const envVars = readEnvFile();
+  let privateKey = envVars.UA_PRIVATE_KEY || process.env.UA_PRIVATE_KEY || "";
+  let wallet;
+  let isNew = false;
+
+  if (privateKey && privateKey.length > 0) {
+    // Existing wallet found
+    try {
+      wallet = new Wallet(privateKey);
+      console.log(`         ✓ Existing wallet found`);
+      console.log(`         Address: ${wallet.address}\n`);
+    } catch (err) {
+      console.error(`  ✗ Invalid private key in .env. Fix UA_PRIVATE_KEY or delete it to generate a new one.\n`);
+      process.exit(1);
+    }
+  } else {
+    // Generate a new wallet
+    wallet = Wallet.createRandom();
+    privateKey = wallet.privateKey;
+    isNew = true;
+
+    console.log(`         ✓ New wallet generated`);
+    console.log(`         Address: ${wallet.address}`);
+    console.log(`\n  ┌────────────────────────────────────────────────────────┐`);
+    console.log(`  │  ⚠  SAVE YOUR PRIVATE KEY — this is the ONLY time    │`);
+    console.log(`  │     it is displayed. It has been saved to .env but    │`);
+    console.log(`  │     you MUST back it up securely.                     │`);
+    console.log(`  │                                                       │`);
+    console.log(`  │  Private Key: ${privateKey}  │`);
+    console.log(`  └────────────────────────────────────────────────────────┘\n`);
+
+    // Save to .env
+    setEnvValue("UA_PRIVATE_KEY", privateKey);
+    console.log(`         ✓ Private key saved to .env\n`);
+  }
+
+  // Save API URL if custom
+  if (args.api && args.api !== API_URL) {
+    setEnvValue("UNIAGENT_API_URL", args.api);
+    console.log(`         ✓ Backend URL saved to .env: ${args.api}\n`);
+  }
+
+  // ── Step 3: Initialize Universal Account on backend ─────────────────────
+  console.log(`  [3/4] Initializing Universal Account...`);
+  let initData;
+  try {
+    initData = await api("/init", { ownerAddress: wallet.address });
+  } catch (err) {
+    console.error(`\n  ✗ Failed to initialize Universal Account: ${err.message}`);
+    console.error(`  This might mean the backend's Particle Network credentials are incorrect.\n`);
+    process.exit(1);
+  }
+
+  const evmAddr = initData.smartAccountAddresses?.evm || "Not available";
+  const solAddr = initData.smartAccountAddresses?.solana || "Not available";
+
+  console.log(`         ✓ Universal Account initialized\n`);
+
+  // ── Step 4: Show deposit addresses + status ─────────────────────────────
+  console.log(`  [4/4] Account ready!\n`);
+
+  console.log(`╔══════════════════════════════════════════════════════════════╗`);
+  console.log(`║   YOUR UNIVERSAL ACCOUNT                                     ║`);
+  console.log(`╠══════════════════════════════════════════════════════════════╣`);
+  console.log(`║                                                              ║`);
+  console.log(`║   Owner Wallet (EOA):                                        ║`);
+  console.log(`║   ${wallet.address}                        ║`);
+  console.log(`║                                                              ║`);
+  console.log(`║   Deposit Addresses (send funds HERE to start trading):      ║`);
+  console.log(`║                                                              ║`);
+  console.log(`║   EVM (Ethereum, Arbitrum, Base, Polygon, etc.):             ║`);
+  console.log(`║   ${evmAddr.padEnd(56)}║`);
+  console.log(`║                                                              ║`);
+  console.log(`║   Solana:                                                    ║`);
+  console.log(`║   ${solAddr.padEnd(56)}║`);
+  console.log(`║                                                              ║`);
+  console.log(`╚══════════════════════════════════════════════════════════════╝`);
+
+  if (initData.funded) {
+    console.log(`\n  Balance: $${initData.totalBalanceUSD?.toFixed(4)}`);
+    if (initData.assets && initData.assets.length > 0) {
+      for (const a of initData.assets) {
+        console.log(`    ${a.symbol}: ${a.totalAmount} ($${a.totalAmountInUSD?.toFixed(2)})`);
+      }
+    }
+    console.log(`\n  ✓ Account is funded. You're ready to trade!\n`);
+  } else {
+    console.log(`
+  ── Next Steps ──────────────────────────────────────────────
+
+  1. Send USDC to your deposit address:
+     • EVM chains (Arbitrum, Base, etc.) → ${evmAddr}
+     • Solana → ${solAddr}
+
+  2. Any of these assets work: USDC, USDT, ETH, SOL, BNB, BTC
+     USDC is recommended — it's the most versatile.
+
+  3. Once funded, verify with:
+     node cli.mjs balance
+
+  4. Start trading:
+     node cli.mjs buy --chain arbitrum --token 0x912...548 --amount 5
+     node cli.mjs buy --chain solana --token native --amount 1
+
+  ─────────────────────────────────────────────────────────────
+`);
+  }
+
+  if (isNew) {
+    console.log(`  ⚠  REMINDER: Back up your private key. If you lose it, you lose access to this account.\n`);
+  }
+}
+
+async function cmdStatus() {
+  console.log("\nChecking setup...\n");
+
+  // Check backend
+  const apiUrl = API_URL;
+  let backendOk = false;
+  try {
+    const health = await api("/health");
+    backendOk = health.status === "ok";
+  } catch (_) {}
+  console.log(`  Backend (${apiUrl}):  ${backendOk ? "✓ Online" : "✗ Unreachable"}`);
+
+  // Check wallet
+  let walletOk = false;
+  let walletAddr = "";
+  try {
+    const w = getWallet();
+    walletOk = true;
+    walletAddr = w.address;
+  } catch (_) {}
+  console.log(`  Wallet:              ${walletOk ? `✓ ${walletAddr}` : "✗ Not configured (run: node cli.mjs init)"}`);
+
+  // Check balance
+  if (backendOk && walletOk) {
+    try {
+      const data = await api("/init", { ownerAddress: walletAddr });
+      const evm = data.smartAccountAddresses?.evm || "N/A";
+      const sol = data.smartAccountAddresses?.solana || "N/A";
+      console.log(`  EVM Address:         ${evm}`);
+      console.log(`  Solana Address:      ${sol}`);
+      console.log(`  Balance:             $${data.totalBalanceUSD?.toFixed(4) || "0.0000"}`);
+      console.log(`  Funded:              ${data.funded ? "✓ Yes — ready to trade" : "✗ No — deposit USDC to start"}`);
+    } catch (err) {
+      console.log(`  Account Status:      ✗ Error: ${err.message}`);
+    }
+  }
+
   console.log("");
 }
 
@@ -323,6 +556,8 @@ async function main() {
 
   try {
     switch (command) {
+      case "init":     await cmdInit(args); break;
+      case "status":   await cmdStatus(); break;
       case "balance":  await cmdBalance(); break;
       case "buy":      await cmdBuy(args); break;
       case "sell":     await cmdSell(args); break;
@@ -336,25 +571,32 @@ async function main() {
 ║   Universal Swap — Cross-Chain Token Trading                ║
 ╚══════════════════════════════════════════════════════════════╝
 
-Commands:
-  balance                                    Show addresses + unified balance
-  buy    --chain X --token Y --amount Z      Buy Z USD worth of token Y on chain X
-  sell   --chain X --token Y --amount Z      Sell Z tokens on chain X
-  convert --chain X --asset A --amount Z     Convert primary assets
-  transfer --chain X --token Y --amount Z --to ADDR   Send tokens
-  history [--page N --size M]                Transaction history
-  chains                                     List supported chains
+  First-time setup:
+    node cli.mjs init                        Set up wallet + Universal Account
+    node cli.mjs init --api http://url       Use a custom backend URL
 
-Flags:
-  --preview    See fees without executing
+  Account:
+    node cli.mjs status                      Check setup (backend, wallet, balance)
+    node cli.mjs balance                     Show addresses + unified balance
 
-Examples:
-  node cli.mjs balance
-  node cli.mjs buy --chain arbitrum --token 0x912...548 --amount 5
-  node cli.mjs buy --chain solana --token native --amount 1
-  node cli.mjs sell --chain base --token 0xabc...def --amount 100
-  node cli.mjs convert --chain base --asset ETH --amount 0.01
-  node cli.mjs transfer --chain arbitrum --token 0xFd0...bb9 --amount 5 --to 0x123...abc
+  Trading:
+    node cli.mjs buy    --chain X --token Y --amount Z      Buy Z USD of token Y on chain X
+    node cli.mjs sell   --chain X --token Y --amount Z      Sell Z tokens on chain X
+    node cli.mjs convert --chain X --asset A --amount Z     Convert primary assets
+    node cli.mjs transfer --chain X --token Y --amount Z --to ADDR   Send tokens
+
+  Info:
+    node cli.mjs history [--page N --size M]                Transaction history
+    node cli.mjs chains                                     List supported chains
+
+  Flags:
+    --preview    See fees without executing
+
+  Quick Start:
+    1. node cli.mjs init           ← generates wallet, shows deposit addresses
+    2. Send USDC to your deposit address
+    3. node cli.mjs balance        ← verify funds arrived
+    4. node cli.mjs buy --chain arbitrum --token 0x912...548 --amount 5
 `);
     }
   } catch (err) {

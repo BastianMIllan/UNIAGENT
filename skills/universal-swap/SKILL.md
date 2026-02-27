@@ -2,24 +2,60 @@
 name: universal-swap
 description: Trade ANY token on ANY supported chain using USDC (or other primary assets) via cross-chain Universal Accounts. Buy, sell, convert, transfer tokens cross-chain without manual bridging.
 user-invocable: true
-metadata: {"openclaw":{"emoji":"🔄","requires":{"bins":["node"],"env":["UA_PRIVATE_KEY","UNIAGENT_API_URL"]},"primaryEnv":"UA_PRIVATE_KEY"}}
+metadata: {"openclaw":{"emoji":"🔄","requires":{"bins":["node"],"env":["UNIAGENT_API_URL"]},"primaryEnv":"UA_PRIVATE_KEY"}}
 ---
 
 # Universal Swap — Cross-Chain Token Trading
 
 Trade **any token** on **any supported chain** using your unified balance (USDC, USDT, ETH, SOL, BNB, BTC) powered by Universal Accounts.
 
-## Setup
+## First-Time Setup
 
-1. Set these environment variables (or configure in `openclaw.json` under `skills.entries.universal-swap.env`):
-   - `UA_PRIVATE_KEY` — The private key of the EOA wallet that owns the Universal Account
-   - `UNIAGENT_API_URL` — The backend API URL (default: `http://localhost:3069`)
-   - `UNIAGENT_API_KEY` — (Optional) API key if the backend requires authentication
+**Run this once after installation. It handles everything automatically.**
 
-2. Install dependencies:
-   ```bash
-   cd {baseDir} && npm install
-   ```
+### Step 1: Install dependencies
+```bash
+cd {baseDir} && npm install
+```
+
+### Step 2: Initialize your account
+```bash
+cd {baseDir} && node cli.mjs init
+```
+
+This command will:
+1. **Check the backend** — confirms the trading API is reachable
+2. **Generate a wallet** — creates a new EOA wallet (or detects your existing one if `UA_PRIVATE_KEY` is already in `.env`)
+3. **Save your private key** to `.env` automatically
+4. **Create your Universal Account** — derives your deposit addresses (EVM + Solana)
+5. **Show you exactly where to send funds**
+
+If the backend is at a custom URL:
+```bash
+cd {baseDir} && node cli.mjs init --api https://your-backend-url.com
+```
+
+### Step 3: Fund your account
+
+After `init`, you'll see two deposit addresses:
+
+- **EVM Address** — send USDC, USDT, ETH, or any supported asset from Ethereum, Arbitrum, Base, Polygon, Optimism, etc.
+- **Solana Address** — send USDC or SOL from Solana
+
+**USDC is recommended** — it's accepted everywhere and has deep liquidity across all 21 chains.
+
+### Step 4: Verify your balance
+```bash
+cd {baseDir} && node cli.mjs balance
+```
+
+Once you see your balance, you're ready to trade.
+
+### Quick Check
+```bash
+cd {baseDir} && node cli.mjs status
+```
+Shows whether the backend is reachable, your wallet is configured, your account is funded — everything at a glance.
 
 ## Available Commands
 
@@ -138,14 +174,19 @@ cd {baseDir} && node cli.mjs history [--page <n>] [--size <n>]
 These are used as source for swaps: **USDC, USDT, ETH, BTC, SOL, BNB**
 
 ## How It Works
-The skill communicates with a backend API that handles all cross-chain trading logic. When you buy a token:
-1. The backend identifies which primary assets you hold across all chains
-2. It finds the optimal route (may involve cross-chain bridging under the hood)
-3. The skill signs the transaction locally with your wallet key (it never leaves your machine)
-4. The backend broadcasts the signed transaction
-5. You receive the target token — no manual bridging needed
+
+1. **On install** → run `init` → generates wallet + derives Universal Account deposit addresses
+2. **Fund account** → send USDC (or ETH/SOL/USDT/BNB/BTC) to the deposit addresses shown by `init`
+3. **Trade** → run `buy`/`sell`/`convert`/`transfer`
+   - The CLI sends your wallet address to the backend
+   - The backend creates the cross-chain transaction via Universal Accounts
+   - The CLI signs it locally (your private key never leaves your machine)
+   - The backend broadcasts the signed transaction
+   - You receive the target token — no manual bridging needed
 
 ## Tips
+- Run `init` first. Everything else depends on it.
+- Use `status` to diagnose problems (backend down? wallet missing? no funds?)
 - Use `native` as the token address for native tokens (ETH, SOL, BNB, etc.)
 - The `--amount` for `buy` is always in USD
 - The `--amount` for `sell` is in the token's own units

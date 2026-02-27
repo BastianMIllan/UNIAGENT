@@ -45,15 +45,30 @@ AI agents are great at reasoning. They're terrible at DeFi. An agent that wants 
 
 ## How Agents Use It
 
-Once installed, an OpenClaw agent can execute cross-chain trades using natural language:
+### First Run — Onboarding
 
-> **User:** "Check my cross-chain balance"  
+When the skill is first installed, the agent runs `init` to set up the wallet and Universal Account:
+
+```
+Agent: node cli.mjs init
+  │
+  ├─▶ Backend is reachable? ✓
+  ├─▶ Wallet exists? No → Generate new wallet, save to .env
+  ├─▶ Call backend /init with wallet address
+  ├─▶ Backend creates Universal Account → returns deposit addresses
+  └─▶ Agent shows: "Send USDC to 0x7F8a... to start trading"
+```
+
+The user (or the agent, if it controls funds) deposits USDC to the deposit address. That's it — they're live on 21 chains.
+
+### Trading — After Setup
+
+Once funded, the agent executes trades from natural language:
+
+> **User:** "Check my balance"  
 > **User:** "Buy $10 of ARB on Arbitrum"  
 > **User:** "Sell 0.5 ETH on Base"  
 > **User:** "Send 50 USDC to 0x... on Polygon"  
-> **User:** "Convert $100 to SOL on Solana"  
-
-The agent reads the skill definition, translates the request into a CLI command, and executes it. Under the hood:
 
 ```
 Agent receives: "Buy $10 of ARB on Arbitrum"
@@ -61,7 +76,7 @@ Agent receives: "Buy $10 of ARB on Arbitrum"
   ├─▶ Translates to: node cli.mjs buy --chain arbitrum --token 0x912...548 --amount 10
   │
   ├─▶ CLI calls backend API → gets transaction rootHash
-  ├─▶ CLI signs rootHash locally with user's wallet key
+  ├─▶ CLI signs rootHash locally with wallet key
   └─▶ CLI submits signature → backend broadcasts → agent reports success
 ```
 
@@ -73,6 +88,8 @@ No bridging knowledge needed. No chain-switching. No manual routing. The agent j
 
 | Capability | What the Agent Can Do |
 |---|---|
+| **Account Setup** | _"Set up my trading account"_ — `init` generates wallet, creates Universal Account, shows deposit addresses |
+| **Status Check** | _"Is my account ready?"_ — `status` checks backend, wallet, balance in one shot |
 | **Cross-Chain Buy** | _"Buy $5 of SOL"_ — Spend from unified balance to purchase any token on any chain |
 | **Cross-Chain Sell** | _"Sell 100 PEPE on Base"_ — Sell any token, proceeds return to unified balance |
 | **Asset Conversion** | _"Convert $50 to ETH on Base"_ — Move between USDC, ETH, SOL, BNB, BTC, USDT |
@@ -154,7 +171,7 @@ No bridging knowledge needed. No chain-switching. No manual routing. The agent j
 ### Prerequisites
 
 - **Node.js** ≥ 18
-- An **EOA wallet** (MetaMask, etc.) with funds on any supported chain
+- **USDC** (or any supported asset) on any chain — to fund your account
 
 ### 1. Clone & Install
 
@@ -163,14 +180,14 @@ git clone https://github.com/BastianMIllan/UNIAGENT.git
 cd UNIAGENT
 ```
 
-### 2. Configure the Backend
+### 2. Start the Backend
 
 ```bash
 cd backend
-cp .env.example .env    # if .env.example exists, otherwise create .env
+cp .env.example .env
 ```
 
-Edit `backend/.env`:
+Edit `backend/.env` with your Particle Network credentials:
 
 ```env
 PARTICLE_PROJECT_ID=your-project-id
@@ -185,31 +202,64 @@ npm install
 node server.mjs
 ```
 
-The API will start on `http://localhost:3069`.
-
-### 3. Configure the Skill
+### 3. Initialize the Skill (this is the real setup)
 
 ```bash
 cd ../skills/universal-swap
-cp .env.example .env
-```
-
-Edit `skills/universal-swap/.env`:
-
-```env
-UNIAGENT_API_URL=http://localhost:3069
-UNIAGENT_API_KEY=your-random-secret
-UA_PRIVATE_KEY=your-wallet-private-key
-```
-
-```bash
 npm install
+node cli.mjs init
 ```
 
-### 4. Trade
+**`init` does everything automatically:**
+1. Checks that the backend is running
+2. Generates a new wallet (or detects your existing one)
+3. Saves your private key to `.env`
+4. Creates your Universal Account
+5. Shows your **deposit addresses** (EVM + Solana)
+
+Example output:
+```
+  [1/4] Checking backend at http://localhost:3069...
+         ✓ Backend is running
+
+  [2/4] Checking wallet...
+         ✓ New wallet generated
+         Address: 0x1a2B3c4D5e6F...
+
+         ⚠  SAVE YOUR PRIVATE KEY — this is the ONLY time it is displayed.
+         Private Key: 0xabc123...
+
+         ✓ Private key saved to .env
+
+  [3/4] Initializing Universal Account...
+         ✓ Universal Account initialized
+
+  [4/4] Account ready!
+
+  ╔══════════════════════════════════════════╗
+  ║   YOUR UNIVERSAL ACCOUNT                 ║
+  ╠══════════════════════════════════════════╣
+  ║                                          ║
+  ║   EVM Deposit Address:                   ║
+  ║   0x7F8a9B...                            ║
+  ║                                          ║
+  ║   Solana Deposit Address:                ║
+  ║   5Kj2Mn...                              ║
+  ╚══════════════════════════════════════════╝
+
+  → Send USDC to your deposit address, then run: node cli.mjs balance
+```
+
+### 4. Fund Your Account
+
+Send USDC (or ETH, SOL, USDT, BNB, BTC) to the deposit addresses shown by `init`:
+- **EVM chains** (Arbitrum, Base, Ethereum, Polygon, etc.) → your EVM deposit address
+- **Solana** → your Solana deposit address
+
+### 5. Verify & Trade
 
 ```bash
-# Check your unified balance across all chains
+# Check your balance
 node cli.mjs balance
 
 # Buy $10 of ARB on Arbitrum
@@ -230,6 +280,9 @@ node cli.mjs transfer --chain arbitrum --token 0xFd086bC7CD5C481DCC9C85ebE478A1C
 # Preview fees without executing
 node cli.mjs buy --chain arbitrum --token 0x912CE59144191C1204E64559FE8253a0e49E6548 --amount 10 --preview
 
+# Quick diagnostic check
+node cli.mjs status
+
 # List all supported chains
 node cli.mjs chains
 ```
@@ -244,6 +297,7 @@ All endpoints are served by the backend (`server.mjs`). Authentication via `x-ap
 |---|---|---|
 | `GET` | `/health` | Health check |
 | `GET` | `/chains` | List supported chains and primary assets |
+| `POST` | `/init` | Initialize Universal Account — returns deposit addresses |
 | `POST` | `/balance` | Get Universal Account addresses and unified balance |
 | `POST` | `/buy` | Create a buy transaction (returns `rootHash` to sign) |
 | `POST` | `/sell` | Create a sell transaction |
@@ -302,6 +356,39 @@ All endpoints are served by the backend (`server.mjs`). Authentication via `x-ap
   "fees": {
     "totalUSD": "0.12",
     "gasUSD": "0.08"
+  }
+}
+```
+</details>
+
+<details>
+<summary><strong>POST /init</strong> — Initialize Universal Account</summary>
+
+**Request:**
+```json
+{
+  "ownerAddress": "0xYourWalletAddress"
+}
+```
+
+**Response:**
+```json
+{
+  "ownerAddress": "0xYourWalletAddress",
+  "smartAccountAddresses": {
+    "evm": "0xSmartAccountAddress",
+    "solana": "SolanaSmartAccountAddress"
+  },
+  "totalBalanceUSD": 0,
+  "assets": [],
+  "funded": false,
+  "instructions": {
+    "step1": "Your Universal Account is ready.",
+    "step2": "To start trading, deposit USDC to your smart account address on any supported chain.",
+    "evmDeposit": "Send USDC/USDT/ETH to: 0xSmartAccountAddress",
+    "solanaDeposit": "Send USDC/SOL to: SolanaSmartAccountAddress",
+    "step3": "Once funded, use 'balance' to verify, then 'buy', 'sell', 'convert', or 'transfer' to trade.",
+    "supportedDepositAssets": ["USDC", "USDT", "ETH", "SOL", "BNB", "BTC"]
   }
 }
 ```

@@ -179,6 +179,65 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "uniagent", timestamp: Date.now() });
 });
 
+// ─── POST /init — initialize a Universal Account for an owner address ────────
+// This is the first call an agent makes. It takes the owner's EOA address,
+// creates the UA, and returns the smart account addresses where the user
+// should deposit funds. No signing needed — this is read-only setup.
+
+app.post("/init", async (req, res) => {
+  try {
+    const { ownerAddress } = req.body;
+    if (!ownerAddress) return res.status(400).json({ error: "Missing ownerAddress" });
+
+    // Validate address format (basic check)
+    if (!/^0x[a-fA-F0-9]{40}$/.test(ownerAddress)) {
+      return res.status(400).json({ error: "Invalid EVM address format. Must be 0x followed by 40 hex characters." });
+    }
+
+    const ua = createUA(ownerAddress);
+
+    // Get the derived smart account addresses
+    const options = await ua.getSmartAccountOptions();
+
+    // Try to get current balance (may be zero for new accounts)
+    let totalBalanceUSD = 0;
+    let assets = [];
+    try {
+      const assetData = await ua.getPrimaryAssets();
+      totalBalanceUSD = assetData.totalAmountInUSD || 0;
+      assets = assetData.assets?.map((a) => ({
+        symbol: a.token?.symbol || "Unknown",
+        totalAmount: a.totalAmount,
+        totalAmountInUSD: a.totalAmountInUSD,
+      })) || [];
+    } catch (_) {
+      // New account with no balance — that's fine
+    }
+
+    res.json({
+      ownerAddress: options.ownerAddress,
+      smartAccountAddresses: {
+        evm: options.smartAccountAddress || null,
+        solana: options.solanaSmartAccountAddress || null,
+      },
+      totalBalanceUSD,
+      assets,
+      funded: totalBalanceUSD > 0,
+      instructions: {
+        step1: "Your Universal Account is ready.",
+        step2: `To start trading, deposit USDC (or any supported asset) to your smart account address on any supported chain.`,
+        evmDeposit: `Send USDC/USDT/ETH to: ${options.smartAccountAddress || "N/A"} (on Ethereum, Arbitrum, Base, Polygon, etc.)`,
+        solanaDeposit: `Send USDC/SOL to: ${options.solanaSmartAccountAddress || "N/A"} (on Solana)`,
+        step3: "Once funded, use 'balance' to verify, then 'buy', 'sell', 'convert', or 'transfer' to trade.",
+        supportedDepositAssets: Object.keys(ASSET_MAP),
+      },
+    });
+  } catch (err) {
+    console.error("Init error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── GET /chains — list supported chains ─────────────────────────────────────
 
 app.get("/chains", (_req, res) => {
@@ -456,6 +515,7 @@ app.listen(PORT, () => {
   API Secret:  ${API_SECRET && API_SECRET !== "change-me-to-a-random-secret" ? "ENABLED" : "DISABLED (set API_SECRET in .env)"}
 
   Endpoints:
+    POST /init       — Initialize Universal Account (returns deposit addresses)
     POST /balance    — Get UA addresses + unified balance
     POST /buy        — Create buy transaction (returns rootHash to sign)
     POST /sell       — Create sell transaction

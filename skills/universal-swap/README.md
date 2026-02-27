@@ -9,7 +9,7 @@
 
 This skill enables OpenClaw AI agents to execute cross-chain token trades on behalf of users. It communicates with the UniAgent backend API for transaction creation and routing, while all signing happens locally — private keys never leave the user's machine.
 
-**Supported operations:** Balance lookup · Buy · Sell · Convert · Transfer · History · Preview
+**Supported operations:** Init · Status · Balance · Buy · Sell · Convert · Transfer · History · Preview
 
 ---
 
@@ -23,9 +23,45 @@ The backend must be running before using the skill. See [`backend/`](../../backe
 cd backend && npm install && node server.mjs
 ```
 
-### 2. Configure Environment
+### 2. Install Dependencies
 
-Add to your OpenClaw config (`~/.openclaw/openclaw.json`):
+```bash
+cd skills/universal-swap && npm install
+```
+
+### 3. Initialize (First-Time Setup)
+
+```bash
+node cli.mjs init
+```
+
+This single command:
+1. Verifies the backend is running
+2. Generates a new wallet (or detects existing one from `.env`)
+3. Saves the private key to `.env` automatically
+4. Creates your Universal Account via the backend
+5. Shows your deposit addresses (EVM + Solana)
+
+If the backend is at a custom URL:
+```bash
+node cli.mjs init --api https://your-backend-url.com
+```
+
+### 4. Fund Your Account
+
+Send USDC (or ETH, SOL, USDT, BNB, BTC) to the deposit addresses shown by `init`.
+
+### 5. Verify
+
+```bash
+node cli.mjs balance
+```
+
+You're ready to trade.
+
+### OpenClaw Config (Alternative)
+
+Instead of using `init`, you can configure manually in `~/.openclaw/openclaw.json`:
 
 ```json
 {
@@ -44,14 +80,6 @@ Add to your OpenClaw config (`~/.openclaw/openclaw.json`):
 }
 ```
 
-Or configure directly in `skills/universal-swap/.env`.
-
-### 3. Install Dependencies
-
-```bash
-cd skills/universal-swap && npm install
-```
-
 ---
 
 ## Usage
@@ -60,15 +88,20 @@ cd skills/universal-swap && npm install
 
 Simply talk to your agent:
 
-> "Check my cross-chain balance"  
+> "Set up my trading account"  
+> "Check my balance"  
 > "Buy $10 of ARB on Arbitrum"  
 > "Sell 0.5 ETH on Base"  
 > "Send 50 USDC to 0x... on Polygon"  
-> "Convert $100 to SOL on Solana"
 
 ### CLI Commands
 
 ```bash
+# Setup & diagnostics
+node cli.mjs init                           # First-time setup (wallet + Universal Account)
+node cli.mjs status                         # Check backend, wallet, balance
+
+# Trading
 node cli.mjs balance
 node cli.mjs buy --chain arbitrum --token 0x912...548 --amount 10
 node cli.mjs sell --chain base --token 0xabc...def --amount 100
@@ -91,15 +124,22 @@ Ethereum · BNB Chain · Base · Arbitrum · Avalanche · Optimism · Polygon ·
 ## How It Works
 
 ```
-Agent: "Buy $10 of ARB on Arbitrum"
-  │
-  ├─▶ CLI calls POST /buy on backend
-  │     └─▶ Backend creates transaction, returns rootHash
-  │
-  ├─▶ CLI signs rootHash locally with user's wallet key
-  │
-  └─▶ CLI calls POST /submit with signature
-        └─▶ Backend broadcasts → user receives ARB tokens
+First Run:
+  node cli.mjs init
+    ├─▶ Generate wallet → save to .env
+    ├─▶ Call backend /init → get deposit addresses
+    └─▶ User sends USDC to deposit address
+
+Trading:
+  Agent: "Buy $10 of ARB on Arbitrum"
+    │
+    ├─▶ CLI calls POST /buy on backend
+    │     └─▶ Backend creates transaction, returns rootHash
+    │
+    ├─▶ CLI signs rootHash locally with wallet key
+    │
+    └─▶ CLI calls POST /submit with signature
+          └─▶ Backend broadcasts → user receives ARB tokens
 ```
 
 ---
