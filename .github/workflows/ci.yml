@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-backend:
+    name: Backend — Lint & Validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: node --check server.mjs
+
+  lint-skill:
+    name: Skill CLI — Lint & Validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: skills/universal-swap
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: skills/universal-swap/package-lock.json
+      - run: npm ci
+      - run: node --check cli.mjs
+      - run: node cli.mjs --help

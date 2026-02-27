@@ -10,12 +10,20 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/BastianMIllan/UNIAGENT/actions/workflows/ci.yml"><img src="https://github.com/BastianMIllan/UNIAGENT/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/BastianMIllan/UNIAGENT/releases"><img src="https://img.shields.io/github/v/release/BastianMIllan/UNIAGENT?color=blue&label=release" alt="Release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License" /></a>
+  <a href="https://github.com/BastianMIllan/UNIAGENT/stargazers"><img src="https://img.shields.io/github/stars/BastianMIllan/UNIAGENT?style=social" alt="Stars" /></a>
+</p>
+
+<p align="center">
   <a href="#why-uniagent">Why UniAgent</a> •
   <a href="#how-agents-use-it">How Agents Use It</a> •
   <a href="#architecture">Architecture</a> •
   <a href="#supported-chains">Chains</a> •
   <a href="#quickstart">Quickstart</a> •
   <a href="#api-reference">API</a> •
+  <a href="#contributing">Contributing</a> •
   <a href="#security">Security</a> •
   <a href="#license">License</a>
 </p>
@@ -422,6 +430,17 @@ UNIAGENT/
 | `universalGas` | `true` | Use PARTI token for gas abstraction |
 | `defaultSourceTokens` | `[]` | Restrict source assets (e.g., `["USDC"]`) |
 | `preferredChains` | `["arbitrum","base","solana"]` | Preferred chains for routing |
+
+---
+
+## Contributing
+
+We welcome contributions! Check out [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on:
+
+- Setting up the development environment
+- Code style and conventions
+- Adding new chains, assets, or commands
+- Submitting pull requests
 
 ---
 
