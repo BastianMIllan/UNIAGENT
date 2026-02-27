@@ -45,42 +45,42 @@ AI agents are great at reasoning. They're terrible at DeFi. An agent that wants 
 
 ## How Agents Use It
 
-### First Run — Onboarding
+### The User Experience
 
-When the skill is first installed, the agent runs `init` to set up the wallet and Universal Account:
+The user installs the skill. That's it. They never touch a terminal. From that point on, they just talk to their agent:
 
-```
-Agent: node cli.mjs init
-  │
-  ├─▶ Backend is reachable? ✓
-  ├─▶ Wallet exists? No → Generate new wallet, save to .env
-  ├─▶ Call backend /init with wallet address
-  ├─▶ Backend creates Universal Account → returns deposit addresses
-  └─▶ Agent shows: "Send USDC to 0x7F8a... to start trading"
-```
+> **User:** "Set up my trading account"  
+> **Agent:** runs `init` → generates wallet → creates Universal Account → returns deposit addresses  
+> **Agent:** "Your account is ready. Send USDC to 0x7F8a... to start trading."
 
-The user (or the agent, if it controls funds) deposits USDC to the deposit address. That's it — they're live on 21 chains.
+> **User:** "I just sent $50 USDC"  
+> **Agent:** runs `balance` → confirms funds arrived  
+> **Agent:** "Got it. $50.00 USDC across your account. What do you want to trade?"
 
-### Trading — After Setup
-
-Once funded, the agent executes trades from natural language:
-
-> **User:** "Check my balance"  
 > **User:** "Buy $10 of ARB on Arbitrum"  
-> **User:** "Sell 0.5 ETH on Base"  
-> **User:** "Send 50 USDC to 0x... on Polygon"  
+> **Agent:** runs `buy --chain arbitrum --token 0x912...548 --amount 10` → signs → submits  
+> **Agent:** "Done. Bought $10 of ARB. [Explorer link]"
+
+### What Happens Under the Hood
 
 ```
-Agent receives: "Buy $10 of ARB on Arbitrum"
+User installs skill → Agent reads SKILL.md
   │
-  ├─▶ Translates to: node cli.mjs buy --chain arbitrum --token 0x912...548 --amount 10
+  ├─▶ First interaction: agent runs init
+  │     ├─▶ Backend reachable? ✓
+  │     ├─▶ Wallet exists? No → generate + save to .env
+  │     ├─▶ Call /init → get deposit addresses
+  │     └─▶ Tell user where to send USDC
   │
-  ├─▶ CLI calls backend API → gets transaction rootHash
-  ├─▶ CLI signs rootHash locally with wallet key
-  └─▶ CLI submits signature → backend broadcasts → agent reports success
+  ├─▶ User funds account
+  │
+  └─▶ Trading: agent translates natural language → CLI commands
+        ├─▶ CLI calls backend → gets rootHash
+        ├─▶ CLI signs locally (key never leaves machine)
+        └─▶ CLI submits → backend broadcasts → done
 ```
 
-No bridging knowledge needed. No chain-switching. No manual routing. The agent just trades.
+No bridging knowledge needed. No chain-switching. No manual routing. The agent handles everything.
 
 ---
 
@@ -202,89 +202,56 @@ npm install
 node server.mjs
 ```
 
-### 3. Initialize the Skill (this is the real setup)
+### 3. Install the Skill
 
 ```bash
 cd ../skills/universal-swap
 npm install
-node cli.mjs init
 ```
 
-**`init` does everything automatically:**
-1. Checks that the backend is running
-2. Generates a new wallet (or detects your existing one)
-3. Saves your private key to `.env`
-4. Creates your Universal Account
-5. Shows your **deposit addresses** (EVM + Solana)
+That's it for manual setup. **From this point, the agent handles everything.**
 
-Example output:
+When a user installs the skill and talks to their agent, the agent:
+1. Runs `init` automatically — generates wallet, creates Universal Account
+2. Shows the user their deposit addresses (EVM + Solana)
+3. Waits for the user to fund the account with USDC
+4. Confirms balance, then executes whatever the user asks
+
+The user never runs CLI commands. The agent reads the SKILL.md and knows exactly what to do.
+
+### What the User Sees
+
 ```
-  [1/4] Checking backend at http://localhost:3069...
-         ✓ Backend is running
+User: "I want to start trading"
+Agent: "Setting up your account..."
+Agent: "Done! Your deposit address is 0x7F8a9B... — send USDC there from any chain."
 
-  [2/4] Checking wallet...
-         ✓ New wallet generated
-         Address: 0x1a2B3c4D5e6F...
+User: "I sent $50 USDC"
+Agent: "Confirmed. $50.00 balance. What do you want to trade?"
 
-         ⚠  SAVE YOUR PRIVATE KEY — this is the ONLY time it is displayed.
-         Private Key: 0xabc123...
-
-         ✓ Private key saved to .env
-
-  [3/4] Initializing Universal Account...
-         ✓ Universal Account initialized
-
-  [4/4] Account ready!
-
-  ╔══════════════════════════════════════════╗
-  ║   YOUR UNIVERSAL ACCOUNT                 ║
-  ╠══════════════════════════════════════════╣
-  ║                                          ║
-  ║   EVM Deposit Address:                   ║
-  ║   0x7F8a9B...                            ║
-  ║                                          ║
-  ║   Solana Deposit Address:                ║
-  ║   5Kj2Mn...                              ║
-  ╚══════════════════════════════════════════╝
-
-  → Send USDC to your deposit address, then run: node cli.mjs balance
+User: "Buy $10 of ARB on Arbitrum"
+Agent: "Done. Bought $10 of ARB. Transaction: universalx.app/activity/details?id=..."
 ```
 
-### 4. Fund Your Account
-
-Send USDC (or ETH, SOL, USDT, BNB, BTC) to the deposit addresses shown by `init`:
-- **EVM chains** (Arbitrum, Base, Ethereum, Polygon, etc.) → your EVM deposit address
-- **Solana** → your Solana deposit address
-
-### 5. Verify & Trade
+### CLI Reference (for agents and developers)
 
 ```bash
-# Check your balance
-node cli.mjs balance
+# Setup
+node cli.mjs init                           # Generate wallet + create Universal Account
+node cli.mjs status                         # Diagnostic check (backend, wallet, funds)
+node cli.mjs balance                        # Show addresses + unified balance
 
-# Buy $10 of ARB on Arbitrum
-node cli.mjs buy --chain arbitrum --token 0x912CE59144191C1204E64559FE8253a0e49E6548 --amount 10
-
-# Buy $1 of SOL
-node cli.mjs buy --chain solana --token native --amount 1
-
-# Sell 100 tokens on Base
+# Trading
+node cli.mjs buy --chain arbitrum --token 0x912...548 --amount 10
 node cli.mjs sell --chain base --token 0xabc...def --amount 100
-
-# Convert to 0.01 ETH on Base
 node cli.mjs convert --chain base --asset ETH --amount 0.01
+node cli.mjs transfer --chain arbitrum --token 0xFd0...bb9 --amount 5 --to 0x123...abc
 
-# Send 5 USDT to someone on Arbitrum
-node cli.mjs transfer --chain arbitrum --token 0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9 --amount 5 --to 0x123...abc
+# Info
+node cli.mjs history                        # Transaction history
+node cli.mjs chains                         # List supported chains
 
-# Preview fees without executing
-node cli.mjs buy --chain arbitrum --token 0x912CE59144191C1204E64559FE8253a0e49E6548 --amount 10 --preview
-
-# Quick diagnostic check
-node cli.mjs status
-
-# List all supported chains
-node cli.mjs chains
+# Add --preview to any trade command to inspect fees before executing
 ```
 
 ---

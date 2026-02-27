@@ -13,55 +13,36 @@ This skill enables OpenClaw AI agents to execute cross-chain token trades on beh
 
 ---
 
-## Setup
+## How It Works
 
-### 1. Start the Backend
+The user installs this skill in OpenClaw. The agent reads the SKILL.md and knows what to do. The user never touches a terminal.
 
-The backend must be running before using the skill. See [`backend/`](../../backend/) for configuration.
+### Prerequisites (operator-side)
+
+The UniAgent backend must be running. See [`backend/`](../../backend/) for configuration.
 
 ```bash
 cd backend && npm install && node server.mjs
 ```
 
-### 2. Install Dependencies
+Then install the skill dependencies:
 
 ```bash
 cd skills/universal-swap && npm install
 ```
 
-### 3. Initialize (First-Time Setup)
+### What Happens When a User Installs the Skill
 
-```bash
-node cli.mjs init
-```
-
-This single command:
-1. Verifies the backend is running
-2. Generates a new wallet (or detects existing one from `.env`)
-3. Saves the private key to `.env` automatically
-4. Creates your Universal Account via the backend
-5. Shows your deposit addresses (EVM + Solana)
-
-If the backend is at a custom URL:
-```bash
-node cli.mjs init --api https://your-backend-url.com
-```
-
-### 4. Fund Your Account
-
-Send USDC (or ETH, SOL, USDT, BNB, BTC) to the deposit addresses shown by `init`.
-
-### 5. Verify
-
-```bash
-node cli.mjs balance
-```
-
-You're ready to trade.
+1. **User installs the skill** in OpenClaw
+2. **User asks anything trading-related** ("set up my account", "buy SOL", "check balance")
+3. **Agent runs `init` automatically** — generates wallet, creates Universal Account, returns deposit addresses
+4. **Agent tells the user** where to send USDC to fund the account
+5. **User sends funds**, agent confirms with `balance`
+6. **Agent handles all trading** from natural language — user never sees CLI commands
 
 ### OpenClaw Config (Alternative)
 
-Instead of using `init`, you can configure manually in `~/.openclaw/openclaw.json`:
+For advanced users who want to bring their own wallet:
 
 ```json
 {
@@ -82,11 +63,9 @@ Instead of using `init`, you can configure manually in `~/.openclaw/openclaw.jso
 
 ---
 
-## Usage
+## User Experience
 
-### As an OpenClaw Agent
-
-Simply talk to your agent:
+The user just talks to their agent:
 
 > "Set up my trading account"  
 > "Check my balance"  
@@ -94,14 +73,16 @@ Simply talk to your agent:
 > "Sell 0.5 ETH on Base"  
 > "Send 50 USDC to 0x... on Polygon"  
 
-### CLI Commands
+The agent reads the SKILL.md, translates the request, and runs the right command. The user never sees the CLI.
+
+### CLI Reference (for agents and developers)
 
 ```bash
-# Setup & diagnostics
-node cli.mjs init                           # First-time setup (wallet + Universal Account)
-node cli.mjs status                         # Check backend, wallet, balance
+# Setup (agent runs these automatically on first use)
+node cli.mjs init                           # Generate wallet + create Universal Account
+node cli.mjs status                         # Diagnostic check (backend, wallet, funds)
 
-# Trading
+# Trading (agent translates natural language → these commands)
 node cli.mjs balance
 node cli.mjs buy --chain arbitrum --token 0x912...548 --amount 10
 node cli.mjs sell --chain base --token 0xabc...def --amount 100
@@ -124,22 +105,20 @@ Ethereum · BNB Chain · Base · Arbitrum · Avalanche · Optimism · Polygon ·
 ## How It Works
 
 ```
-First Run:
-  node cli.mjs init
-    ├─▶ Generate wallet → save to .env
-    ├─▶ Call backend /init → get deposit addresses
-    └─▶ User sends USDC to deposit address
-
-Trading:
-  Agent: "Buy $10 of ARB on Arbitrum"
-    │
-    ├─▶ CLI calls POST /buy on backend
-    │     └─▶ Backend creates transaction, returns rootHash
-    │
-    ├─▶ CLI signs rootHash locally with wallet key
-    │
-    └─▶ CLI calls POST /submit with signature
-          └─▶ Backend broadcasts → user receives ARB tokens
+User installs skill → Agent reads SKILL.md
+  │
+  ├─▶ First use: agent runs init
+  │     ├─▶ Generate wallet → save to .env
+  │     ├─▶ Call /init → get deposit addresses
+  │     └─▶ Tell user: "Send USDC to 0x... to start trading"
+  │
+  ├─▶ User funds account
+  │
+  └─▶ Agent handles trading:
+        User: "Buy $10 of ARB on Arbitrum"
+          ├─▶ CLI calls POST /buy → gets rootHash
+          ├─▶ CLI signs locally (key never leaves machine)
+          └─▶ CLI submits → backend broadcasts → done
 ```
 
 ---

@@ -7,55 +7,56 @@ metadata: {"openclaw":{"emoji":"🔄","requires":{"bins":["node"],"env":["UNIAGE
 
 # Universal Swap — Cross-Chain Token Trading
 
-Trade **any token** on **any supported chain** using your unified balance (USDC, USDT, ETH, SOL, BNB, BTC) powered by Universal Accounts.
+Trade **any token** on **any supported chain** using a unified balance (USDC, USDT, ETH, SOL, BNB, BTC) powered by Universal Accounts.
 
-## First-Time Setup
+## How the Agent Uses This Skill
 
-**Run this once after installation. It handles everything automatically.**
+The user installs this skill. That's all they do. Everything below is handled **by the agent automatically**.
 
-### Step 1: Install dependencies
+### First Use — Account Setup
+
+When the user first asks to trade, check balance, or do anything crypto-related, the agent should:
+
+1. Install dependencies (if not already done):
 ```bash
 cd {baseDir} && npm install
 ```
 
-### Step 2: Initialize your account
+2. Run init to set up the wallet and Universal Account:
 ```bash
 cd {baseDir} && node cli.mjs init
 ```
 
-This command will:
-1. **Check the backend** — confirms the trading API is reachable
-2. **Generate a wallet** — creates a new EOA wallet (or detects your existing one if `UA_PRIVATE_KEY` is already in `.env`)
-3. **Save your private key** to `.env` automatically
-4. **Create your Universal Account** — derives your deposit addresses (EVM + Solana)
-5. **Show you exactly where to send funds**
+This will:
+- **Check the backend** — confirm the trading API is reachable
+- **Generate a wallet** — create a new EOA wallet (or detect an existing one if `UA_PRIVATE_KEY` is already in `.env`)
+- **Save the private key** to `.env` automatically
+- **Create the Universal Account** — derive deposit addresses (EVM + Solana)
+- **Return the deposit addresses** to show the user
 
 If the backend is at a custom URL:
 ```bash
 cd {baseDir} && node cli.mjs init --api https://your-backend-url.com
 ```
 
-### Step 3: Fund your account
+3. **Tell the user their deposit addresses** and ask them to send USDC (or any supported asset) to fund the account:
+   - **EVM Address** — for deposits from Ethereum, Arbitrum, Base, Polygon, Optimism, etc.
+   - **Solana Address** — for deposits from Solana
+   - Recommend USDC — it has deep liquidity across all 21 chains.
 
-After `init`, you'll see two deposit addresses:
-
-- **EVM Address** — send USDC, USDT, ETH, or any supported asset from Ethereum, Arbitrum, Base, Polygon, Optimism, etc.
-- **Solana Address** — send USDC or SOL from Solana
-
-**USDC is recommended** — it's accepted everywhere and has deep liquidity across all 21 chains.
-
-### Step 4: Verify your balance
+4. Once the user confirms they've sent funds, verify with:
 ```bash
 cd {baseDir} && node cli.mjs balance
 ```
 
-Once you see your balance, you're ready to trade.
-
-### Quick Check
+5. To diagnose any issues (backend down? wallet missing? no funds?):
 ```bash
 cd {baseDir} && node cli.mjs status
 ```
-Shows whether the backend is reachable, your wallet is configured, your account is funded — everything at a glance.
+
+### After Setup — Trading
+
+Once the account is funded, the agent translates natural language requests into CLI commands. The user never sees or types these commands.
 
 ## Available Commands
 
@@ -173,23 +174,24 @@ cd {baseDir} && node cli.mjs history [--page <n>] [--size <n>]
 ## Primary Assets (Deep Liquidity)
 These are used as source for swaps: **USDC, USDT, ETH, BTC, SOL, BNB**
 
-## How It Works
+## How It Works Under the Hood
 
-1. **On install** → run `init` → generates wallet + derives Universal Account deposit addresses
-2. **Fund account** → send USDC (or ETH/SOL/USDT/BNB/BTC) to the deposit addresses shown by `init`
-3. **Trade** → run `buy`/`sell`/`convert`/`transfer`
-   - The CLI sends your wallet address to the backend
+1. **User installs skill** → agent reads this file and knows what to do
+2. **First interaction** → agent runs `init` → wallet is generated, Universal Account is created, deposit addresses are returned
+3. **User funds account** → sends USDC (or ETH/SOL/USDT/BNB/BTC) to the deposit addresses the agent showed them
+4. **User asks to trade** → agent runs the appropriate CLI command
+   - The CLI sends the wallet address to the backend
    - The backend creates the cross-chain transaction via Universal Accounts
-   - The CLI signs it locally (your private key never leaves your machine)
+   - The CLI signs it locally (private key never leaves the machine)
    - The backend broadcasts the signed transaction
-   - You receive the target token — no manual bridging needed
+   - The token arrives — no manual bridging, no chain switching
 
-## Tips
-- Run `init` first. Everything else depends on it.
-- Use `status` to diagnose problems (backend down? wallet missing? no funds?)
+## Important Notes for the Agent
+- Always run `init` before any other command if `UA_PRIVATE_KEY` is not yet in `.env`
+- Use `status` to diagnose problems before telling the user something is broken
 - Use `native` as the token address for native tokens (ETH, SOL, BNB, etc.)
 - The `--amount` for `buy` is always in USD
 - The `--amount` for `sell` is in the token's own units
 - The `--amount` for `convert` is in the target asset's units
-- Always `--preview` first for large trades to check fees
+- Always `--preview` first for large trades to check fees before executing
 - Slippage is set to 1% by default; adjust in `config.json`
