@@ -1,0 +1,27 @@
+{
+  "name": "universal-swap",
+  "version": "1.0.0",
+  "description": "Cross-chain token trading via Particle Network Universal Accounts",
+  "type": "module",
+  "main": "cli.mjs",
+  "scripts": {
+    "balance": "node cli.mjs balance",
+    "buy": "node cli.mjs buy",
+    "sell": "node cli.mjs sell",
+    "convert": "node cli.mjs convert",
+    "transfer": "node cli.mjs transfer",
+    "history": "node cli.mjs history"
+  },
+  "dependencies": {
+    "ethers": "^6.13.0"
+  },
+  "keywords": [
+    "particle-network",
+    "universal-accounts",
+    "cross-chain",
+    "swap",
+    "defi",
+    "usdc"
+  ],
+  "license": "MIT"
+}

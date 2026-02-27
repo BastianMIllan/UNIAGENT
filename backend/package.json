@@ -1,0 +1,19 @@
+{
+  "name": "uniagent-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Universal Swap — wraps Particle Network Universal Accounts",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs"
+  },
+  "dependencies": {
+    "@particle-network/universal-account-sdk": "^1.0.0",
+    "ethers": "^6.13.0",
+    "express": "^5.0.1",
+    "cors": "^2.8.5",
+    "helmet": "^8.0.0"
+  },
+  "license": "MIT"
+}

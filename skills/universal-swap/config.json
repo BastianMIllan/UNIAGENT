@@ -1,0 +1,6 @@
+{
+  "slippageBps": 100,
+  "universalGas": true,
+  "defaultSourceTokens": [],
+  "preferredChains": ["arbitrum", "base", "solana"]
+}
