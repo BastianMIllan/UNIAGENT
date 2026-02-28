@@ -102,6 +102,49 @@ const ASSET_MAP = {
 
 const NATIVE_ADDRESS = "0x0000000000000000000000000000000000000000";
 
+// ─── Reverse lookups (chainId → readable name, tokenType → symbol) ──────────
+
+const CHAIN_ID_TO_NAME = {
+  1: "Ethereum",
+  10: "Optimism",
+  56: "BNB Chain",
+  101: "Solana",
+  137: "Polygon",
+  143: "Monad",
+  146: "Sonic",
+  169: "Manta",
+  196: "X Layer",
+  999: "HyperEVM",
+  1030: "Conflux",
+  4200: "Merlin",
+  5000: "Mantle",
+  8453: "Base",
+  9745: "Plasma",
+  34443: "Mode",
+  42161: "Arbitrum",
+  43114: "Avalanche",
+  59144: "Linea",
+  80094: "Berachain",
+  81457: "Blast",
+};
+
+const TOKEN_TYPE_TO_INFO = {
+  eth:  { symbol: "ETH",  name: "Ethereum" },
+  usdc: { symbol: "USDC", name: "USD Coin" },
+  usdt: { symbol: "USDT", name: "Tether" },
+  btc:  { symbol: "BTC",  name: "Bitcoin" },
+  bnb:  { symbol: "BNB",  name: "BNB" },
+  sol:  { symbol: "SOL",  name: "Solana" },
+};
+
+function resolveChainName(chainId) {
+  return CHAIN_ID_TO_NAME[chainId] || `Chain ${chainId}`;
+}
+
+function resolveTokenInfo(tokenType) {
+  return TOKEN_TYPE_TO_INFO[tokenType] || { symbol: tokenType?.toUpperCase() || "?", name: tokenType || "Unknown" };
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function resolveChain(name) {
@@ -146,11 +189,31 @@ function createUA(ownerAddress, opts = {}) {
 const pendingTxns = new Map();
 const TX_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-function storePendingTx(rootHash, transaction, ua) {
+// In-memory transaction detail log (survives as long as server runs)
+// Maps rootHash → { type, asset, chain, amount, createdAt, transactionId?, status }
+const txDetailLog = new Map();
+const TX_LOG_MAX = 500;
+
+function storePendingTx(rootHash, transaction, ua, detail = {}) {
   pendingTxns.set(rootHash, { transaction, ua, createdAt: Date.now() });
-  // Cleanup old entries
+  // Store enriched detail
+  txDetailLog.set(rootHash, {
+    rootHash,
+    type: detail.type || "UNKNOWN",
+    asset: detail.asset || "",
+    chain: detail.chain || "",
+    amount: detail.amount || "",
+    createdAt: Date.now(),
+    status: "pending",
+  });
+  // Cleanup old pending entries
   for (const [key, val] of pendingTxns) {
     if (Date.now() - val.createdAt > TX_TTL_MS) pendingTxns.delete(key);
+  }
+  // Cap log size
+  if (txDetailLog.size > TX_LOG_MAX) {
+    const oldest = txDetailLog.keys().next().value;
+    txDetailLog.delete(oldest);
   }
 }
 
@@ -205,11 +268,14 @@ app.post("/init", async (req, res) => {
     try {
       const assetData = await ua.getPrimaryAssets();
       totalBalanceUSD = assetData.totalAmountInUSD || 0;
-      assets = assetData.assets?.map((a) => ({
-        symbol: a.token?.symbol || "Unknown",
-        totalAmount: a.totalAmount,
-        totalAmountInUSD: a.totalAmountInUSD,
-      })) || [];
+      assets = assetData.assets?.map((a) => {
+        const info = resolveTokenInfo(a.tokenType);
+        return {
+          symbol: info.symbol,
+          totalAmount: a.amount || 0,
+          totalAmountInUSD: a.amountInUSD || 0,
+        };
+      }) || [];
     } catch (_) {
       // New account with no balance — that's fine
     }
@@ -256,7 +322,7 @@ app.post("/balance", async (req, res) => {
     if (!ownerAddress) return res.status(400).json({ error: "Missing ownerAddress" });
 
     const ua = createUA(ownerAddress);
-    const [options, assets] = await Promise.all([
+    const [options, rawAssets] = await Promise.all([
       ua.getSmartAccountOptions(),
       ua.getPrimaryAssets(),
     ]);
@@ -265,18 +331,21 @@ app.post("/balance", async (req, res) => {
       ownerAddress: options.ownerAddress,
       evmAddress: options.smartAccountAddress || null,
       solanaAddress: options.solanaSmartAccountAddress || null,
-      totalBalanceUSD: assets.totalAmountInUSD,
-      assets: assets.assets?.map((a) => ({
-        symbol: a.token?.symbol || "Unknown",
-        name: a.token?.name || "Unknown",
-        totalAmount: a.totalAmount,
-        totalAmountInUSD: a.totalAmountInUSD,
-        chains: a.chainAggregation?.map((c) => ({
-          chain: c.chain?.name || `Chain ${c.chainId}`,
-          chainId: c.chainId,
-          amount: c.amount,
-        })) || [],
-      })) || [],
+      totalBalanceUSD: rawAssets.totalAmountInUSD || 0,
+      assets: rawAssets.assets?.map((a) => {
+        const info = resolveTokenInfo(a.tokenType);
+        return {
+          symbol: info.symbol,
+          name: info.name,
+          totalAmount: a.amount || 0,
+          totalAmountInUSD: a.amountInUSD || 0,
+          chains: a.chainAggregation?.map((c) => ({
+            chain: resolveChainName(c.token?.chainId),
+            chainId: c.token?.chainId,
+            amount: c.amount || 0,
+          })) || [],
+        };
+      }) || [],
     });
   } catch (err) {
     console.error("Balance error:", err.message);
@@ -303,8 +372,9 @@ app.post("/buy", async (req, res) => {
       amountInUSD: String(amountInUSD),
     });
 
-    // Store transaction server-side, return rootHash for signing
-    storePendingTx(transaction.rootHash, transaction, ua);
+    storePendingTx(transaction.rootHash, transaction, ua, {
+      type: "BUY", asset: token, chain, amount: `$${amountInUSD}`,
+    });
 
     const preview = extractPreview(transaction);
 
@@ -338,7 +408,9 @@ app.post("/sell", async (req, res) => {
       amount: String(amount),
     });
 
-    storePendingTx(transaction.rootHash, transaction, ua);
+    storePendingTx(transaction.rootHash, transaction, ua, {
+      type: "SELL", asset: token, chain, amount: String(amount),
+    });
 
     res.json({
       rootHash: transaction.rootHash,
@@ -372,7 +444,9 @@ app.post("/convert", async (req, res) => {
       chainId,
     });
 
-    storePendingTx(transaction.rootHash, transaction, ua);
+    storePendingTx(transaction.rootHash, transaction, ua, {
+      type: "CONVERT", asset: asset.toUpperCase(), chain, amount: String(amount),
+    });
 
     res.json({
       rootHash: transaction.rootHash,
@@ -406,7 +480,9 @@ app.post("/transfer", async (req, res) => {
       receiver,
     });
 
-    storePendingTx(transaction.rootHash, transaction, ua);
+    storePendingTx(transaction.rootHash, transaction, ua, {
+      type: "TRANSFER", asset: token, chain, amount: String(amount),
+    });
 
     res.json({
       rootHash: transaction.rootHash,
@@ -436,8 +512,14 @@ app.post("/submit", async (req, res) => {
 
     const result = await ua.sendTransaction(transaction, signature);
 
-    // Clean up
+    // Clean up pending, update log
     pendingTxns.delete(rootHash);
+    const logEntry = txDetailLog.get(rootHash);
+    if (logEntry) {
+      logEntry.transactionId = result.transactionId;
+      logEntry.status = "confirmed";
+      logEntry.explorerUrl = `https://universalx.app/activity/details?id=${result.transactionId}`;
+    }
 
     res.json({
       transactionId: result.transactionId,
@@ -477,6 +559,14 @@ app.post("/history", async (req, res) => {
     console.error("History error:", err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ─── GET /txlog — get enriched transaction log (server-side) ─────────────
+
+app.get("/txlog", (_req, res) => {
+  const entries = Array.from(txDetailLog.values())
+    .sort((a, b) => b.createdAt - a.createdAt);
+  res.json({ items: entries });
 });
 
 // ─── Preview helper ──────────────────────────────────────────────────────────

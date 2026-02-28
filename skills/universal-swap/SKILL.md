@@ -1,7 +1,7 @@
 ---
 name: universal-swap
 description: Trade ANY token on ANY supported chain using USDC (or other primary assets) via cross-chain Universal Accounts. Buy, sell, convert, transfer tokens cross-chain without manual bridging.
-user-invocable: true
+user-invokable: true
 metadata: {"openclaw":{"emoji":"🔄","requires":{"bins":["node"],"env":["UNIAGENT_API_URL"]},"primaryEnv":"UA_PRIVATE_KEY"}}
 ---
 
